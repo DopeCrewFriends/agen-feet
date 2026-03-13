@@ -1,11 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import ConnectPhantom from "./components/ConnectPhantom";
 import { Transaction } from "@solana/web3.js";
 
 type Status = "idle" | "request" | "sign" | "sending" | "verifying" | "success" | "error";
+
+type ClaimLog = {
+  timestamp: string;
+  claimSignature?: string;
+  claimAmountLamports?: number;
+  claimAmountSol?: number;
+  paymentSignature?: string;
+  paymentAmountLamports?: number;
+  error?: string;
+};
 
 export default function Home() {
   const { publicKey, signTransaction, connected } = useWallet();
@@ -16,6 +26,59 @@ export default function Home() {
   const [error, setError] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [currency, setCurrency] = useState<"usdc" | "sol">("usdc");
+
+  const [creatorStats, setCreatorStats] = useState<{
+    totalCollectedSol: number;
+    claims: ClaimLog[];
+    nextClaimInMs: number;
+  } | null>(null);
+  const [countdownMs, setCountdownMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchStats() {
+      try {
+        const res = await fetch("/api/claim-creator-fee/stats");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) {
+          setCreatorStats({
+            totalCollectedSol: data.totalCollectedSol ?? 0,
+            claims: data.claims ?? [],
+            nextClaimInMs: data.nextClaimInMs ?? 300000,
+          });
+          setCountdownMs(data.nextClaimInMs ?? 300000);
+        }
+      } catch {
+        if (!cancelled) setCreatorStats({ totalCollectedSol: 0, claims: [], nextClaimInMs: 300000 });
+      }
+    }
+    fetchStats();
+    const t = setInterval(fetchStats, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (creatorStats && countdownMs === null) setCountdownMs(creatorStats.nextClaimInMs);
+  }, [creatorStats, countdownMs]);
+
+  useEffect(() => {
+    if (creatorStats && countdownMs === null) setCountdownMs(creatorStats.nextClaimInMs);
+  }, [creatorStats, countdownMs]);
+
+  useEffect(() => {
+    if (countdownMs == null) return;
+    const id = setInterval(() => {
+      setCountdownMs((m) => {
+        const next = Math.max(0, (m ?? 0) - 1000);
+        return next === 0 ? 300000 : next;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [countdownMs]);
 
   async function handleUnlock() {
     if (!publicKey || !signTransaction) {
@@ -96,13 +159,17 @@ export default function Home() {
 
   const loading = ["request", "sign", "sending", "verifying"].includes(status);
 
+  const formatCountdown = (ms: number) => {
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-[var(--bg-dark)] relative">
-      {connected && (
-        <div className="absolute top-4 right-4">
-          <ConnectPhantom />
-        </div>
-      )}
+      <div className="absolute top-4 right-4 z-10">
+        <ConnectPhantom />
+      </div>
 
       <div className="w-full max-w-md">
         <div className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)]">
@@ -197,6 +264,66 @@ export default function Home() {
                 <ConnectPhantom />
               </div>
             )}
+
+            <div className="mt-4 pt-4 border-t border-[var(--border)]">
+              <p className="text-xs text-[var(--text-muted)] mb-3">Creator rewards (auto-claimed every 5 min)</p>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-[var(--text-muted)]">Collected (recent)</span>
+                  <span className="font-medium text-[var(--text)]">
+                    {creatorStats ? `${creatorStats.totalCollectedSol.toFixed(6)} SOL` : "—"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[var(--text-muted)]">Claims</span>
+                  <span className="font-medium text-[var(--text)]">
+                    {creatorStats ? creatorStats.claims.length : "—"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[var(--text-muted)]">Next claim in</span>
+                  <span className="font-mono font-medium text-[var(--accent)] tabular-nums">
+                    {countdownMs != null ? formatCountdown(countdownMs) : "—"}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-[var(--border)]">
+                <p className="text-xs text-[var(--text-muted)] mb-2">Past claims</p>
+                {creatorStats && creatorStats.claims.length > 0 ? (
+                  <ul className="space-y-2 max-h-32 overflow-y-auto">
+                    {creatorStats.claims.slice(0, 10).map((c, i) => {
+                      const sig = c.paymentSignature || c.claimSignature;
+                      const amount =
+                        c.paymentAmountLamports != null
+                          ? `${(c.paymentAmountLamports / 1e9).toFixed(6)} SOL`
+                          : c.claimAmountSol != null
+                            ? `${c.claimAmountSol.toFixed(6)} SOL`
+                            : c.error ?? "—";
+                      const time = new Date(c.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                      return (
+                        <li key={i} className="text-xs flex justify-between items-center gap-2">
+                          {sig ? (
+                            <a
+                              href={`https://solscan.io/tx/${sig}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-[var(--accent)] hover:underline truncate"
+                            >
+                              {amount}
+                            </a>
+                          ) : (
+                            <span className="font-medium text-[var(--text)]">{amount}</span>
+                          )}
+                          <span className="text-[var(--text-muted)] shrink-0">{time}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-[var(--text-muted)]">No claims yet</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

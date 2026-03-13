@@ -25,6 +25,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# claim logs (local persistence)
+/data
+
 # local env files (never commit secrets)
 .env
 .env*.local

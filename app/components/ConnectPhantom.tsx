@@ -17,7 +17,15 @@ export default function ConnectPhantom() {
   const [showDropdown, setShowDropdown] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const phantomWallet = wallets.find((w) => w.adapter.name === "Phantom");
+  // Prefer installed/loadable, fall back to any configured wallet (click will prompt install)
+  const installedOrLoadable = wallets.filter(
+    (w) => w.readyState === "Installed" || w.readyState === "Loadable"
+  );
+  const phantomWallet =
+    installedOrLoadable.find((w) => w.adapter.name === "Phantom") ??
+    wallets.find((w) => w.adapter.name === "Phantom");
+  const primaryWallet =
+    phantomWallet ?? installedOrLoadable[0] ?? wallets[0];
 
   useEffect(() => {
     if (!showDropdown) return;
@@ -31,17 +39,17 @@ export default function ConnectPhantom() {
   }, [showDropdown]);
 
   const handleConnect = useCallback(async () => {
-    if (!connect || !phantomWallet) return;
+    if (!connect || !primaryWallet) return;
     setConnecting(true);
     try {
-      await select(phantomWallet.adapter.name);
+      await select(primaryWallet.adapter.name);
       await connect();
     } catch (e) {
       console.error(e);
     } finally {
       setConnecting(false);
     }
-  }, [connect, select, phantomWallet]);
+  }, [connect, select, primaryWallet]);
 
   const handleDisconnect = useCallback(async () => {
     if (!disconnect) return;
@@ -94,7 +102,7 @@ export default function ConnectPhantom() {
     <button
       type="button"
       onClick={handleConnect}
-      disabled={connecting || !phantomWallet}
+      disabled={connecting || !primaryWallet}
       className="flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#AB9FF2] to-[#7C3AED] text-white text-sm font-semibold transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-[#AB9FF2]/25 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:opacity-50"
     >
       {connecting ? (

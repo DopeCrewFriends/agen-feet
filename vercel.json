@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/claim-creator-fee/auto",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
