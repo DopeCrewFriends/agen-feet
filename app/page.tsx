@@ -177,7 +177,6 @@ export default function Home() {
           <div className="relative aspect-[4/5] overflow-hidden">
             {imageUrl ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imageUrl}
                   alt="Unlocked"
