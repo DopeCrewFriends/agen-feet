@@ -32,3 +32,24 @@ body {
   font-family: 'Space Grotesk', sans-serif;
 }
 
+/* Wallet adapter modal dark theme */
+.wallet-adapter-modal-overlay {
+  background: rgba(0, 0, 0, 0.8) !important;
+}
+.wallet-adapter-modal {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+}
+.wallet-adapter-modal-title {
+  color: var(--text) !important;
+}
+.wallet-adapter-modal-list .wallet-adapter-button {
+  color: var(--text) !important;
+  background: var(--bg-card-hover) !important;
+  border: 1px solid var(--border) !important;
+}
+.wallet-adapter-modal-list .wallet-adapter-button:hover {
+  background: rgba(233, 30, 140, 0.2) !important;
+  border-color: var(--accent) !important;
+}
+

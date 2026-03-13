@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import ConnectPhantom from "./components/ConnectPhantom";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { Transaction } from "@solana/web3.js";
 
 type Status = "idle" | "request" | "sign" | "sending" | "verifying" | "success" | "error";
@@ -167,8 +167,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-[var(--bg-dark)] relative">
-      <div className="absolute top-4 right-4 z-10">
-        <ConnectPhantom />
+      <div className="absolute top-4 right-4 z-10 [&_.wallet-adapter-button]:!bg-gradient-to-r [&_.wallet-adapter-button]:!from-[#AB9FF2] [&_.wallet-adapter-button]:!to-[#7C3AED] [&_.wallet-adapter-button]:!rounded-full [&_.wallet-adapter-button]:!text-white [&_.wallet-adapter-button]:!font-semibold [&_.wallet-adapter-button]:hover:!opacity-90">
+        <WalletMultiButton />
       </div>
 
       <div className="w-full max-w-md">
@@ -259,9 +259,11 @@ export default function Home() {
             ) : (
               <div className="flex flex-col items-center gap-4 py-4">
                 <p className="text-center text-[var(--text-muted)] text-sm">
-                  Connect Phantom to unlock exclusive content
+                  Connect your wallet to unlock exclusive content
                 </p>
-                <ConnectPhantom />
+                <div className="[&_.wallet-adapter-button]:!bg-gradient-to-r [&_.wallet-adapter-button]:!from-[#AB9FF2] [&_.wallet-adapter-button]:!to-[#7C3AED] [&_.wallet-adapter-button]:!rounded-full [&_.wallet-adapter-button]:!py-3 [&_.wallet-adapter-button]:!px-6 [&_.wallet-adapter-button]:!text-white [&_.wallet-adapter-button]:!font-semibold [&_.wallet-adapter-button]:hover:!opacity-90">
+                  <WalletMultiButton />
+                </div>
               </div>
             )}
 

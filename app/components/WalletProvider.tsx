@@ -17,7 +17,6 @@ export default function WalletProvider({
     process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
     "https://rpc.solanatracker.io/public";
 
-  // Explicit adapters as fallback; wallet standard auto-detects Phantom, Solflare, etc.
   const wallets = useMemo(
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
     []
@@ -25,7 +24,7 @@ export default function WalletProvider({
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <SolanaWalletProvider wallets={wallets} autoConnect>
+      <SolanaWalletProvider wallets={wallets} autoConnect={false}>
         {children}
       </SolanaWalletProvider>
     </ConnectionProvider>

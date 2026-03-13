@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import WalletProvider from "./components/WalletProvider";
+import WalletModalWrapper from "./components/WalletModalWrapper";
 
 export const metadata: Metadata = {
   title: "Exclusive Content",
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <WalletProvider>{children}</WalletProvider>
+        <WalletProvider>
+          <WalletModalWrapper>{children}</WalletModalWrapper>
+        </WalletProvider>
       </body>
     </html>
   );
