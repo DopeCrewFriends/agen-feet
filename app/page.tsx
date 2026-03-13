@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import ConnectPhantom from "./components/ConnectPhantom";
 import { Transaction } from "@solana/web3.js";
 
 type Status = "idle" | "request" | "sign" | "sending" | "verifying" | "success" | "error";
@@ -98,9 +98,11 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-[var(--bg-dark)] relative">
-      <div className="absolute top-4 right-4">
-        <WalletMultiButton />
-      </div>
+      {connected && (
+        <div className="absolute top-4 right-4">
+          <ConnectPhantom />
+        </div>
+      )}
 
       <div className="w-full max-w-md">
         <div className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)]">
@@ -188,9 +190,12 @@ export default function Home() {
                 )}
               </>
             ) : (
-              <p className="text-center text-[var(--text-muted)] text-sm">
-                Connect your wallet to unlock
-              </p>
+              <div className="flex flex-col items-center gap-4 py-4">
+                <p className="text-center text-[var(--text-muted)] text-sm">
+                  Connect Phantom to unlock exclusive content
+                </p>
+                <ConnectPhantom />
+              </div>
             )}
           </div>
         </div>
