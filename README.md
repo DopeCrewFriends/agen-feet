@@ -52,3 +52,4 @@ A cron runs every 5 min: (1) claim, (2) wrap to wSOL and pay into agent, (3) log
 Manual trigger: `curl -X POST .../api/claim-creator-fee/auto -H "Authorization: Bearer $CRON_SECRET"`. Logs: `GET /api/claim-creator-fee/logs`.
 
 
+
