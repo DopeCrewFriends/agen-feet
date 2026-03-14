@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { Transaction } from "@solana/web3.js";
@@ -34,6 +34,7 @@ export default function Home() {
   } | null>(null);
   const [countdownMs, setCountdownMs] = useState<number | null>(null);
 
+  const fetchStatsRef = useRef<() => Promise<void>>();
   useEffect(() => {
     let cancelled = false;
     async function fetchStats() {
@@ -41,18 +42,20 @@ export default function Home() {
         const res = await fetch("/api/claim-creator-fee/stats");
         if (!res.ok || cancelled) return;
         const data = await res.json();
+        const nextMs = data.nextClaimInMs ?? 300000;
         if (!cancelled) {
           setCreatorStats({
             totalCollectedSol: data.totalCollectedSol ?? 0,
             claims: data.claims ?? [],
-            nextClaimInMs: data.nextClaimInMs ?? 300000,
+            nextClaimInMs: nextMs,
           });
-          setCountdownMs(data.nextClaimInMs ?? 300000);
+          setCountdownMs(nextMs);
         }
       } catch {
         if (!cancelled) setCreatorStats({ totalCollectedSol: 0, claims: [], nextClaimInMs: 300000 });
       }
     }
+    fetchStatsRef.current = fetchStats;
     fetchStats();
     const t = setInterval(fetchStats, 30_000);
     return () => {
@@ -65,16 +68,19 @@ export default function Home() {
     if (creatorStats && countdownMs === null) setCountdownMs(creatorStats.nextClaimInMs);
   }, [creatorStats, countdownMs]);
 
-  useEffect(() => {
-    if (creatorStats && countdownMs === null) setCountdownMs(creatorStats.nextClaimInMs);
-  }, [creatorStats, countdownMs]);
-
+  const wasZeroRef = useRef(false);
   useEffect(() => {
     if (countdownMs == null) return;
     const id = setInterval(() => {
       setCountdownMs((m) => {
         const next = Math.max(0, (m ?? 0) - 1000);
-        return next === 0 ? 300000 : next;
+        if (next === 0 && !wasZeroRef.current && fetchStatsRef.current) {
+          wasZeroRef.current = true;
+          fetchStatsRef.current();
+        } else if (next > 0) {
+          wasZeroRef.current = false;
+        }
+        return next;
       });
     }, 1000);
     return () => clearInterval(id);

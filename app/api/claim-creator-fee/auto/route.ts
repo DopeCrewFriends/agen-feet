@@ -3,24 +3,45 @@ import {
   Connection,
   Keypair,
   PublicKey,
-  SystemProgram,
   Transaction,
+  TransactionMessage,
   VersionedTransaction,
-  ComputeBudgetProgram,
 } from "@solana/web3.js";
+import { ComputeBudgetProgram } from "@solana/web3.js";
 import { PumpAgent } from "@pump-fun/agent-payments-sdk";
 import {
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-  NATIVE_MINT,
-  TOKEN_PROGRAM_ID,
-  createAssociatedTokenAccountIdempotentInstruction,
-  createSyncNativeInstruction,
-  getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
+  OnlinePumpSdk,
+  PUMP_SDK,
+  bondingCurvePda,
+  feeSharingConfigPda,
+} from "@pump-fun/pump-sdk";
 import bs58 from "bs58";
 import { logClaim, type ClaimLog } from "../logs-store";
 
 const PUMPPORTAL = "https://pumpportal.fun/api/trade-local";
+
+async function buildClaimTx(
+  conn: Connection,
+  keypair: Keypair,
+  agentMint: string
+): Promise<{ ixs: import("@solana/web3.js").TransactionInstruction[]; mode: string } | null> {
+  const sdk = new OnlinePumpSdk(conn);
+  const mint = new PublicKey(agentMint);
+  const bcPda = bondingCurvePda(mint);
+  const bcInfo = await conn.getAccountInfo(bcPda);
+  if (bcInfo) {
+    const bc = PUMP_SDK.decodeBondingCurveNullable(bcInfo);
+    if (bc && bc.creator.equals(feeSharingConfigPda(mint))) {
+      const res = await sdk.buildDistributeCreatorFeesInstructions(mint);
+      return { ixs: res.instructions, mode: "distribute" };
+    }
+  }
+  const ixs = await sdk.collectCoinCreatorFeeInstructions(
+    keypair.publicKey,
+    keypair.publicKey
+  );
+  return ixs.length > 0 ? { ixs, mode: "collect" } : null;
+}
 const WSOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 const MIN_CLAIM_LAMPORTS = 100_000; // 0.0001 SOL - skip payment if less
 const FEE_BUFFER_LAMPORTS = 50_000; // leave for tx fees
@@ -98,45 +119,67 @@ export async function POST(req: Request) {
       await connection.getBalance(keypair.publicKey);
     console.log("[claim-auto] Balance before:", balanceBefore, "lamports");
 
-    // 2. Claim creator rewards
-    const claimRes = await fetch(PUMPPORTAL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        publicKey: keypair.publicKey.toBase58(),
-        action: "collectCreatorFee",
-        priorityFee: 0.000001,
-        pool: "pump",
-      }),
-    });
+    // 2. Claim creator rewards (pump SDK for fee-sharing tokens, PumpPortal fallback)
+    let claimSig: string;
+    const claimBuild = await buildClaimTx(connection, keypair, agentMint);
 
-    if (!claimRes.ok) {
-      const text = await claimRes.text();
-      console.error("[claim-auto] PumpPortal error:", claimRes.status, text);
-      let errMsg = `PumpPortal error (${claimRes.status})`;
-      try {
-        const json = JSON.parse(text);
-        if (json.error || json.message) errMsg = json.error || json.message;
-      } catch {
-        if (text.length < 200) errMsg = text || errMsg;
+    if (claimBuild && claimBuild.ixs.length > 0) {
+      console.log("[claim-auto] Using pump SDK, mode:", claimBuild.mode);
+      console.log("[claim-auto] Sending claim tx...");
+      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      const msg = new TransactionMessage({
+        payerKey: keypair.publicKey,
+        recentBlockhash: blockhash,
+        instructions: [
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 500_000 }),
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200_000 }),
+          ...claimBuild.ixs,
+        ],
+      }).compileToV0Message();
+      const claimTx = new VersionedTransaction(msg);
+      claimTx.sign([keypair]);
+      claimSig = await connection.sendRawTransaction(claimTx.serialize(), {
+        skipPreflight: true,
+        preflightCommitment: "confirmed",
+        maxRetries: 5,
+      });
+    } else {
+      console.log("[claim-auto] Using PumpPortal...");
+      console.log("[claim-auto] Sending claim tx...");
+      const claimRes = await fetch(PUMPPORTAL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicKey: keypair.publicKey.toBase58(),
+          action: "collectCreatorFee",
+          priorityFee: 0.000001,
+        }),
+      });
+      if (!claimRes.ok) {
+        const text = await claimRes.text();
+        console.error("[claim-auto] PumpPortal error:", claimRes.status, text);
+        let errMsg = `PumpPortal error (${claimRes.status})`;
+        try {
+          const json = JSON.parse(text);
+          if (json.error || json.message) errMsg = json.error ?? json.message;
+        } catch {
+          if (text.length < 200) errMsg = text || errMsg;
+        }
+        const entry: ClaimLog = {
+          timestamp: new Date().toISOString(),
+          error: `Claim failed: ${errMsg}`,
+        };
+        logClaim(entry);
+        return NextResponse.json({ error: errMsg }, { status: 400 });
       }
-      const entry: ClaimLog = {
-        timestamp: new Date().toISOString(),
-        error: `Claim failed: ${errMsg}`,
-      };
-      logClaim(entry);
-      return NextResponse.json({ error: errMsg }, { status: 400 });
+      const claimTxBuf = await claimRes.arrayBuffer();
+      const claimTx = VersionedTransaction.deserialize(new Uint8Array(claimTxBuf));
+      claimTx.sign([keypair]);
+      claimSig = await connection.sendRawTransaction(claimTx.serialize(), {
+        skipPreflight: true,
+        preflightCommitment: "confirmed",
+      });
     }
-
-    const claimTxBuf = await claimRes.arrayBuffer();
-    const claimTx = VersionedTransaction.deserialize(new Uint8Array(claimTxBuf));
-    claimTx.sign([keypair]);
-
-    console.log("[claim-auto] Sending claim tx...");
-    const claimSig = await connection.sendRawTransaction(claimTx.serialize(), {
-      skipPreflight: false,
-      preflightCommitment: "confirmed",
-    });
 
     // Wait for claim to confirm (HTTP polling, no WebSocket)
     await waitForConfirmation(connection, claimSig);
@@ -195,18 +238,10 @@ export async function POST(req: Request) {
       });
     }
 
-    // 4. Pay full claimed amount into agent (minus fee buffer)
+    // 4. Pay full claimed amount into agent (minus fee buffer) — same tx shape as manual 1 SOL test
     const payAmountLamports = Math.max(
       MIN_CLAIM_LAMPORTS,
       claimedLamports - FEE_BUFFER_LAMPORTS
-    );
-
-    const wsolAta = getAssociatedTokenAddressSync(
-      NATIVE_MINT,
-      keypair.publicKey,
-      false,
-      TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
     const agent = new PumpAgent(
@@ -226,34 +261,19 @@ export async function POST(req: Request) {
       memo,
       startTime,
       endTime,
+      computeUnitLimit: 200_000,
+      computeUnitPrice: 150_000,
     });
 
     const payTx = new Transaction();
     const { blockhash } = await connection.getLatestBlockhash("confirmed");
     payTx.recentBlockhash = blockhash;
     payTx.feePayer = keypair.publicKey;
-    payTx.add(
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
-      createAssociatedTokenAccountIdempotentInstruction(
-        keypair.publicKey,
-        wsolAta,
-        keypair.publicKey,
-        NATIVE_MINT,
-        TOKEN_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-      ),
-      SystemProgram.transfer({
-        fromPubkey: keypair.publicKey,
-        toPubkey: wsolAta,
-        lamports: payAmountLamports,
-      }),
-      createSyncNativeInstruction(wsolAta, TOKEN_PROGRAM_ID),
-      ...payInstructions
-    );
+    payTx.add(...payInstructions);
 
     payTx.sign(keypair);
     const paySig = await connection.sendRawTransaction(payTx.serialize(), {
-      skipPreflight: false,
+      skipPreflight: true,
       preflightCommitment: "confirmed",
     });
 

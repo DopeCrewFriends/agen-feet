@@ -53,4 +53,3 @@ Manual trigger: `curl -X POST .../api/claim-creator-fee/auto -H "Authorization: 
 
 
 
-

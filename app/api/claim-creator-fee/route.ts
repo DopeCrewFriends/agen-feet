@@ -30,7 +30,6 @@ export async function POST(req: Request) {
         publicKey,
         action: "collectCreatorFee",
         priorityFee: 0.000001,
-        pool: "pump",
       }),
     });
 
