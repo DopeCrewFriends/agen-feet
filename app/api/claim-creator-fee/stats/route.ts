@@ -7,7 +7,7 @@ import { getClaimLogs } from "../logs-store";
  */
 export async function GET() {
   try {
-    const logs = getClaimLogs();
+    const logs = await getClaimLogs();
     const totalCollectedLamports = logs.reduce((s, l) => {
       const amt = l.paymentAmountLamports ?? l.claimAmountLamports ?? 0;
       return s + (amt > 0 ? amt : 0);

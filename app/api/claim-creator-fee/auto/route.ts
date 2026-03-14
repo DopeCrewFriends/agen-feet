@@ -169,7 +169,7 @@ export async function POST(req: Request) {
           timestamp: new Date().toISOString(),
           error: `Claim failed: ${errMsg}`,
         };
-        logClaim(entry);
+        await logClaim(entry);
         return NextResponse.json({ error: errMsg }, { status: 400 });
       }
       const claimTxBuf = await claimRes.arrayBuffer();
@@ -227,7 +227,7 @@ export async function POST(req: Request) {
         claimAmountLamports: claimedLamports,
         claimAmountSol: claimedSol,
       };
-      logClaim(entry);
+      await logClaim(entry);
       return NextResponse.json({
         success: true,
         claimSignature: claimSig,
@@ -287,7 +287,7 @@ export async function POST(req: Request) {
       paymentSignature: paySig,
       paymentAmountLamports: payAmountLamports,
     };
-    logClaim(entry);
+    await logClaim(entry);
 
     return NextResponse.json({
       success: true,
@@ -305,7 +305,7 @@ export async function POST(req: Request) {
       timestamp: new Date().toISOString(),
       error: errMsg,
     };
-    logClaim(entry);
+    await logClaim(entry);
     console.error("[claim-creator-fee/auto]", e);
     return NextResponse.json({ error: errMsg }, { status: 500 });
   }
