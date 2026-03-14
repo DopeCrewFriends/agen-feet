@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
-import { getClaimLogs } from "../logs-store";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { getClaimLogsFromChain } from "../chain-history";
 
 /**
- * Returns creator rewards stats: recent claims and next claim countdown.
- * No auth required - public read-only.
+ * Returns creator rewards stats from chain (creator tx history).
+ * No storage needed - reads directly from Solana.
  */
 export async function GET() {
   try {
-    const logs = await getClaimLogs();
+    const creatorPubkey = process.env.CREATOR_PUBLIC_KEY;
+    const rpc = process.env.SOLANA_RPC_URL ?? process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
+
+    let logs: Awaited<ReturnType<typeof getClaimLogsFromChain>> = [];
+    if (creatorPubkey && rpc) {
+      const connection = new Connection(rpc);
+      logs = await getClaimLogsFromChain(
+        connection,
+        new PublicKey(creatorPubkey),
+        15
+      );
+    }
     const totalCollectedLamports = logs.reduce((s, l) => {
       const amt = l.paymentAmountLamports ?? l.claimAmountLamports ?? 0;
       return s + (amt > 0 ? amt : 0);

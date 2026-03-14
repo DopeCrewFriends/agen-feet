@@ -16,7 +16,6 @@ import {
   feeSharingConfigPda,
 } from "@pump-fun/pump-sdk";
 import bs58 from "bs58";
-import { logClaim, type ClaimLog } from "../logs-store";
 
 const PUMPPORTAL = "https://pumpportal.fun/api/trade-local";
 
@@ -165,11 +164,7 @@ export async function POST(req: Request) {
         } catch {
           if (text.length < 200) errMsg = text || errMsg;
         }
-        const entry: ClaimLog = {
-          timestamp: new Date().toISOString(),
-          error: `Claim failed: ${errMsg}`,
-        };
-        await logClaim(entry);
+        console.error("[creator-rewards] Claim failed:", errMsg);
         return NextResponse.json({ error: errMsg }, { status: 400 });
       }
       const claimTxBuf = await claimRes.arrayBuffer();
@@ -221,13 +216,7 @@ export async function POST(req: Request) {
 
     // 3. If nothing meaningful claimed, log and return
     if (claimedLamports < MIN_CLAIM_LAMPORTS) {
-      const entry: ClaimLog = {
-        timestamp: new Date().toISOString(),
-        claimSignature: claimSig,
-        claimAmountLamports: claimedLamports,
-        claimAmountSol: claimedSol,
-      };
-      await logClaim(entry);
+      console.log("[creator-rewards]", { claimSig, claimedLamports });
       return NextResponse.json({
         success: true,
         claimSignature: claimSig,
@@ -279,15 +268,7 @@ export async function POST(req: Request) {
 
     await waitForConfirmation(connection, paySig);
 
-    const entry: ClaimLog = {
-      timestamp: new Date().toISOString(),
-      claimSignature: claimSig,
-      claimAmountLamports: claimedLamports,
-      claimAmountSol: claimedSol,
-      paymentSignature: paySig,
-      paymentAmountLamports: payAmountLamports,
-    };
-    await logClaim(entry);
+    console.log("[creator-rewards]", { claimSig, paySig, payAmountLamports });
 
     return NextResponse.json({
       success: true,
@@ -301,12 +282,6 @@ export async function POST(req: Request) {
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
     console.error("[claim-auto] Error:", errMsg, e);
-    const entry: ClaimLog = {
-      timestamp: new Date().toISOString(),
-      error: errMsg,
-    };
-    await logClaim(entry);
-    console.error("[claim-creator-fee/auto]", e);
     return NextResponse.json({ error: errMsg }, { status: 500 });
   }
 }
