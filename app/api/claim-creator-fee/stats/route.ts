@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getClaimLogsFromChain } from "../chain-history";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * Returns creator rewards stats from chain (creator tx history).
  * No storage needed - reads directly from Solana.
@@ -34,20 +37,28 @@ export async function GET() {
     nextRun.setMinutes(mins + (5 - (mins % 5)));
     const nextClaimInMs = Math.max(0, nextRun.getTime() - now.getTime());
 
-    return NextResponse.json({
-      claims: logs,
-      totalCollectedLamports,
-      totalCollectedSol: totalCollectedLamports / 1e9,
-      nextClaimInMs,
-      nextClaimAt: nextRun.toISOString(),
-    });
+    return NextResponse.json(
+      {
+        claims: logs,
+        totalCollectedLamports,
+        totalCollectedSol: totalCollectedLamports / 1e9,
+        nextClaimInMs,
+        nextClaimAt: nextRun.toISOString(),
+      },
+      {
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+      }
+    );
   } catch {
-    return NextResponse.json({
-      claims: [],
-      totalCollectedLamports: 0,
-      totalCollectedSol: 0,
-      nextClaimInMs: 0,
-      nextClaimAt: null,
-    });
+    return NextResponse.json(
+      {
+        claims: [],
+        totalCollectedLamports: 0,
+        totalCollectedSol: 0,
+        nextClaimInMs: 0,
+        nextClaimAt: null,
+      },
+      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+    );
   }
 }

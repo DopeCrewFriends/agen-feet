@@ -39,7 +39,10 @@ export default function Home() {
     let cancelled = false;
     async function fetchStats() {
       try {
-        const res = await fetch("/api/claim-creator-fee/stats");
+        const res = await fetch("/api/claim-creator-fee/stats", {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
         if (!res.ok || cancelled) return;
         const data = await res.json();
         const nextMs = data.nextClaimInMs ?? 300000;
